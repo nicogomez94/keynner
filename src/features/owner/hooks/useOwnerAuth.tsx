@@ -1,9 +1,9 @@
-import { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
-import { loginLocal } from '../../../services/api';
+import { loginOwner } from '../../../services/api';
 
-interface AuthContextType {
-  localId: string | null;
+interface OwnerAuthContextType {
+  ownerId: string | null;
   isAuthenticated: boolean;
   login: (id: string) => Promise<boolean>;
   logout: () => void;
@@ -12,8 +12,8 @@ interface AuthContextType {
 }
 
 // Creamos el contexto con un valor inicial
-const AuthContext = createContext<AuthContextType>({
-  localId: null,
+const OwnerAuthContext = createContext<OwnerAuthContextType>({
+  ownerId: null,
   isAuthenticated: false,
   login: async () => false,
   logout: () => {},
@@ -21,23 +21,23 @@ const AuthContext = createContext<AuthContextType>({
   error: null,
 });
 
-// Proveedor del contexto de autenticación
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [localId, setLocalId] = useState<string | null>(null);
+// Proveedor del contexto de autenticación para propietarios
+export const OwnerAuthProvider = ({ children }: { children: ReactNode }): React.ReactElement => {
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Función para iniciar sesión
+  // Función para iniciar sesión como propietario
   const login = async (id: string): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await loginLocal(id);
+      const response = await loginOwner(id);
       
       if (response.success) {
-        setLocalId(id);
+        setOwnerId(id);
         setIsAuthenticated(true);
         return true;
       } else {
@@ -54,13 +54,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Función para cerrar sesión
   const logout = () => {
-    setLocalId(null);
+    setOwnerId(null);
     setIsAuthenticated(false);
     setError(null);
   };
+
   return (
-    <AuthContext.Provider value={{ 
-      localId, 
+    <OwnerAuthContext.Provider value={{ 
+      ownerId, 
       isAuthenticated, 
       login, 
       logout,
@@ -68,11 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error
     }}>
       {children}
-    </AuthContext.Provider>
+    </OwnerAuthContext.Provider>
   );
 };
 
-// Hook personalizado para usar el contexto de autenticación
-export const useAuth = () => {
-  return useContext(AuthContext);
+// Hook personalizado para usar el contexto de autenticación de propietarios
+export const useOwnerAuth = () => {
+  return useContext(OwnerAuthContext);
 };

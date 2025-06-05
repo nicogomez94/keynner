@@ -1,47 +1,48 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { useAuth } from '../hooks/useAuth.tsx';
+import { useOwnerAuth } from '../hooks/useOwnerAuth';
 
-export const LocalAuthScreen = () => {
-  const [localId, setLocalId] = useState('');
-  const { login, isLoading, error: authError } = useAuth();
+export const OwnerAuthScreen = () => {
+  const [ownerId, setOwnerId] = useState('');
+  const { login, isLoading, error } = useOwnerAuth();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!localId.trim()) {
+    if (!ownerId.trim()) {
       return;
     }
 
-    await login(localId.trim());
+    await login(ownerId.trim());
   };
+
   return (
     <div style={{ maxWidth: '400px', margin: '0 auto', padding: '20px' }}>
-      <h1>KeyNest - Acceso de Local</h1>
+      <h1>KeyNest - Acceso de Propietario</h1>
       
-      {authError && (
+      {error && (
         <div style={{ padding: '10px', backgroundColor: '#f8d7da', color: '#721c24', marginBottom: '15px', borderRadius: '4px' }}>
-          {authError}
+          {error}
         </div>
       )}
       
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="local-id" style={{ display: 'block', marginBottom: '5px' }}>
-            ID del Local:
+          <label htmlFor="owner-id" style={{ display: 'block', marginBottom: '5px' }}>
+            ID del Propietario:
           </label>
           <input
-            id="local-id"
+            id="owner-id"
             type="text"
-            value={localId}
-            onChange={(e) => setLocalId(e.target.value)}
+            value={ownerId}
+            onChange={(e) => setOwnerId(e.target.value)}
             style={{ width: '100%', padding: '8px' }}
-            placeholder="Ingrese el ID del local"
+            placeholder="Ingrese su ID de propietario"
             disabled={isLoading}
             required
           />
           <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>
-            <em>Prueba con: "LOCAL_VALIDO_123" o "LOCAL_VALIDO_456"</em>
+            <em>Prueba con: "OWNER_001" o "OWNER_002"</em>
           </p>
         </div>
         <button 

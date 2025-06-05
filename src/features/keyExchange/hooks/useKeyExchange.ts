@@ -1,14 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../auth/hooks/useAuth.tsx';
+import { confirmKeyDropOff, confirmKeyPickUp, getLocalTransactions } from '../../../services/api';
+import { sendKeyStatusNotification, checkNotificationPermission } from '../../../services/notificationService';
 
 // Tipos para las acciones de intercambio de llaves
 export type KeyActionType = 'drop-off' | 'pick-up';
+
+// Interfaz para las transacciones de llaves
+export interface KeyTransaction {
+  code: string;
+  ownerId: string;
+  localId: string;
+  collectorId: string | null;
+  status: string;
+  createdAt: string;
+  receivedAt: string | null;
+  deliveredAt: string | null;
+  payment?: {
+    success: boolean;
+    transactionId?: string;
+    amount?: number;
+  }
+}
 
 // Tipo para el estado del hook
 interface KeyExchangeState {
   isLoading: boolean;
   errorMessage: string | null;
   successMessage: string | null;
+  transactions: KeyTransaction[];
+  isLoadingTransactions: boolean;
 }
 
 // Hook personalizado para manejar la lógica de intercambio de llaves
@@ -18,10 +39,49 @@ export const useKeyExchange = () => {
     isLoading: false,
     errorMessage: null,
     successMessage: null,
+    transactions: [],
+    isLoadingTransactions: false,
   });
   
   // Obtenemos el ID del local desde el contexto de autenticación
   const auth = useAuth();
+
+  // Verificamos permisos de notificaciones al inicializar el hook
+  useEffect(() => {
+    checkNotificationPermission();
+    
+    // Si el usuario está autenticado, cargamos las transacciones
+    if (auth.isAuthenticated && auth.localId) {
+      fetchTransactions();
+      
+      // Configurar un intervalo para actualizar las transacciones cada minuto
+      const intervalId = setInterval(fetchTransactions, 60000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [auth.isAuthenticated, auth.localId]);
+  
+  // Función para cargar las transacciones del local
+  const fetchTransactions = async () => {
+    if (!auth.localId) return;
+    
+    setState(prev => ({ ...prev, isLoadingTransactions: true }));
+    
+    try {
+      const response = await getLocalTransactions(auth.localId);
+      
+      if (response.success && response.data) {
+        setState(prev => ({ 
+          ...prev, 
+          transactions: response.data,
+          isLoadingTransactions: false 
+        }));
+      }
+    } catch (error) {
+      console.error('Error al cargar transacciones:', error);
+      setState(prev => ({ ...prev, isLoadingTransactions: false }));
+    }
+  };
 
   // Resetea los mensajes de error y éxito
   const resetMessages = () => {
@@ -42,18 +102,23 @@ export const useKeyExchange = () => {
       
       console.log(`Local ${auth.localId}: Procesando recepción de llave con código: ${code}`);
       
-      // Simulación de una llamada a API usando fetch
-      const response = await simulateApiCall('/api/local/key-dropoff', {
-        localId: auth.localId,
-        transactionCode: code
-      });
+      // Llamada real a la API usando la función del servicio
+      const response = await confirmKeyDropOff(code, auth.localId);
       
       if (response.success) {
+        // Mostrar notificación
+        if (response.data) {
+          sendKeyStatusNotification(code, 'RECEIVED', auth.localId);
+        }
+        
         setState(prev => ({
           ...prev,
           isLoading: false,
           successMessage: response.message,
         }));
+        
+        // Actualizar la lista de transacciones
+        fetchTransactions();
       } else {
         throw new Error(response.message);
       }
@@ -76,18 +141,43 @@ export const useKeyExchange = () => {
       
       console.log(`Local ${auth.localId}: Procesando entrega de llave con código: ${code}`);
       
-      // Simulación de una llamada a API usando fetch
-      const response = await simulateApiCall('/api/local/key-pickup', {
-        localId: auth.localId,
-        transactionCode: code
-      });
+      // Llamada real a la API usando la función del servicio
+      const response = await confirmKeyPickUp(code, auth.localId);
       
       if (response.success) {
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          successMessage: response.message,
-        }));
+        // Mostrar notificación
+        if (response.data) {
+          sendKeyStatusNotification(code, 'DELIVERED', auth.localId);
+          
+          // Si hay información de pago, mostrarla en el mensaje de éxito
+          if (response.data.payment) {
+            const paymentInfo = response.data.payment;
+            const successMsg = `${response.message}. ${paymentInfo.success ? 
+              `Pago procesado: $${paymentInfo.amount} (ID: ${paymentInfo.transactionId})` : 
+              'Hubo un problema al procesar el pago.'}`;
+              
+            setState(prev => ({
+              ...prev,
+              isLoading: false,
+              successMessage: successMsg,
+            }));
+          } else {
+            setState(prev => ({
+              ...prev,
+              isLoading: false,
+              successMessage: response.message,
+            }));
+          }
+        } else {
+          setState(prev => ({
+            ...prev,
+            isLoading: false,
+            successMessage: response.message,
+          }));
+        }
+        
+        // Actualizar la lista de transacciones
+        fetchTransactions();
       } else {
         throw new Error(response.message);
       }
@@ -99,42 +189,12 @@ export const useKeyExchange = () => {
       }));
     }
   };
-  // Función para simular una llamada a API
-  const simulateApiCall = async (url: string, data: { localId: string; transactionCode: string }): Promise<{ success: boolean; message: string }> => {
-    // Simulación de una latencia de red
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Obtener la acción del tipo de URL para generar un mensaje adecuado
-    const actionType = url.includes('dropoff') ? 'recepción' : 'entrega';
-    
-    // Validación del código
-    if (!data.transactionCode || data.transactionCode.trim().length < 4) {
-      return {
-        success: false,
-        message: `El código de transacción debe tener al menos 4 caracteres`
-      };
-    }
-    
-    // Código específico para simular un error
-    if (data.transactionCode === 'TEST_ERROR_CODE') {
-      return {
-        success: false,
-        message: `Error: Código de transacción inválido o ya utilizado`
-      };
-    }
-    
-    // Si todo está bien, retornar éxito
-    return {
-      success: true,
-      message: `La ${actionType} de llave con código ${data.transactionCode} ha sido confirmada correctamente`
-    };
-  };
-
   // Retorna el estado y las funciones
   return {
     ...state,
     confirmDropOff,
     confirmPickUp,
     resetMessages,
+    fetchTransactions,
   };
 };
